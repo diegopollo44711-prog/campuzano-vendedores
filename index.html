@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plataforma de Vendedores</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="login-page">
+  <div class="login-card">
+    <div class="logo">
+      <div class="emoji">🤝</div>
+      <h1>Plataforma de Ventas</h1>
+      <p>Campuzano — Área de Vendedores</p>
+    </div>
+    <div class="form-group">
+      <label>Tu nombre completo</label>
+      <input type="text" id="nombre" placeholder="Ej. Juan Pérez" autofocus>
+    </div>
+    <button class="btn btn-primary" id="btn-login"
+      style="width:100%;justify-content:center;padding:11px;font-size:14px;">
+      Entrar →
+    </button>
+    <p style="text-align:center;color:#9CA3AF;font-size:12px;margin-top:14px;">
+      Tu nombre se usa para filtrar tus cotizaciones y pedidos.
+    </p>
+  </div>
+</div>
+
+<script>
+  if (localStorage.getItem('vendedor_nombre')) {
+    window.location.href = 'dashboard.html';
+  }
+
+  document.getElementById('nombre').addEventListener('keydown', e => {
+    if (e.key === 'Enter') login();
+  });
+
+  document.getElementById('btn-login').addEventListener('click', login);
+
+  function login() {
+    const nombre = document.getElementById('nombre').value.trim();
+    if (!nombre) {
+      document.getElementById('nombre').style.borderColor = '#EF4444';
+      return;
+    }
+    localStorage.setItem('vendedor_nombre', nombre);
+    window.location.href = 'dashboard.html';
+  }
+</script>
+</body>
+</html>

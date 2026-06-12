@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRM — Vendedores</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1>🤝 Ventas</h1>
+    <span>Plataforma de Vendedores</span>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="dashboard.html"    class="nav-item" data-page="dashboard">   <span class="icon">📊</span> Dashboard</a>
+    <a href="cotizaciones.html" class="nav-item" data-page="cotizaciones"><span class="icon">📋</span> Cotizaciones</a>
+    <a href="pedidos.html"      class="nav-item" data-page="pedidos">     <span class="icon">📦</span> Mis Pedidos</a>
+    <a href="ventas.html"       class="nav-item" data-page="ventas">      <span class="icon">💰</span> Ventas</a>
+    <a href="crm.html"          class="nav-item" data-page="crm">         <span class="icon">👥</span> CRM</a>
+  </nav>
+  <div class="sidebar-footer" id="sidebar-user"></div>
+</aside>
+
+<main class="main">
+  <div class="page-header">
+    <h2>CRM — Prospectos</h2>
+    <p>Gestiona tus prospectos y oportunidades de venta</p>
+  </div>
+
+  <!-- Vista toggle -->
+  <div style="display:flex;gap:10px;margin-bottom:20px;align-items:center">
+    <button class="btn btn-primary btn-sm" id="btn-tabla" onclick="setVista('tabla')">☰ Lista</button>
+    <button class="btn btn-secondary btn-sm" id="btn-kanban" onclick="setVista('kanban')">⬛ Kanban</button>
+    <div style="flex:1"></div>
+    <button class="btn btn-primary" onclick="openNew()">+ Nuevo Prospecto</button>
+  </div>
+
+  <!-- Vista lista -->
+  <div id="vista-tabla">
+    <div class="card">
+      <div class="card-header">
+        <div class="filter-bar" style="margin-bottom:0">
+          <input type="text" id="search" placeholder="🔍 Buscar nombre o empresa...">
+          <select id="filter-etapa">
+            <option value="">Todas las etapas</option>
+            <option value="lead">Lead</option>
+            <option value="contactado">Contactado</option>
+            <option value="propuesta">Propuesta</option>
+            <option value="negociacion">Negociación</option>
+            <option value="cerrado">Cerrado</option>
+            <option value="perdido">Perdido</option>
+          </select>
+        </div>
+        <span style="font-size:12px;color:#6B7280" id="pros-count"></span>
+      </div>
+      <div id="tabla-pros">
+        <div class="empty-state"><div class="icon">⏳</div><p>Cargando...</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vista kanban -->
+  <div id="vista-kanban" style="display:none">
+    <div class="kanban" id="kanban-board"></div>
+  </div>
+</main>
+
+<!-- Modal Prospecto -->
+<div class="modal-overlay" id="modal-pros">
+  <div class="modal">
+    <h3 id="pros-modal-title">Nuevo Prospecto</h3>
+    <input type="hidden" id="pros-id">
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nombre *</label>
+        <input type="text" id="pros-nombre" placeholder="Nombre del contacto">
+      </div>
+      <div class="form-group">
+        <label>Empresa</label>
+        <input type="text" id="pros-empresa" placeholder="Nombre de la empresa">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Teléfono</label>
+        <input type="tel" id="pros-telefono" placeholder="55 1234 5678">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="pros-email" placeholder="email@empresa.com">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Etapa</label>
+        <select id="pros-etapa">
+          <option value="lead">Lead</option>
+          <option value="contactado">Contactado</option>
+          <option value="propuesta">Propuesta</option>
+          <option value="negociacion">Negociación</option>
+          <option value="cerrado">Cerrado</option>
+          <option value="perdido">Perdido</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Valor estimado (opcional)</label>
+        <input type="number" id="pros-valor" placeholder="0.00" step="0.01">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Notas</label>
+      <textarea id="pros-notas" placeholder="Notas, seguimientos, contexto..." rows="3"></textarea>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-del-pros" onclick="deletePros()" style="margin-right:auto;display:none">Eliminar</button>
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="savePros()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const vendedor = requireAuth();
+renderSidebarUser();
+setSidebarActive('crm');
+const db = initSupabase();
+
+let allData = [];
+let vistaActual = 'tabla';
+
+const ETAPAS = ['lead','contactado','propuesta','negociacion','cerrado','perdido'];
+const ETAPA_LABELS = { lead:'Lead', contactado:'Contactado', propuesta:'Propuesta', negociacion:'Negociación', cerrado:'Cerrado ✓', perdido:'Perdido' };
+
+async function load() {
+  const { data, error } = await db.from('prospectos')
+    .select('*')
+    .eq('vendedor', vendedor)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    if (error.code === '42P01') {
+      document.getElementById('tabla-pros').innerHTML =
+        `<div class="empty-state" style="color:#DC2626">
+          <div class="icon">⚠️</div>
+          <p>La tabla <strong>prospectos</strong> no existe aún.<br>
+          Ejecuta el SQL de setup en Supabase para crearla.</p>
+        </div>`;
+      return;
+    }
+    showToast('Error: ' + error.message, 'error'); return;
+  }
+
+  allData = data || [];
+  if (vistaActual === 'tabla') renderTabla(allData);
+  else renderKanban(allData);
+}
+
+function renderTabla(data) {
+  document.getElementById('pros-count').textContent = data.length + ' prospecto(s)';
+  const el = document.getElementById('tabla-pros');
+  if (!data.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">👥</div><p>Sin prospectos. Agrega el primero.</p></div>';
+    return;
+  }
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>Nombre</th><th>Empresa</th><th>Teléfono</th><th>Email</th><th>Etapa</th><th>Valor Est.</th><th></th>
+    </tr></thead>
+    <tbody>${data.map(p => `<tr>
+      <td><strong>${p.nombre}</strong></td>
+      <td>${p.empresa || '—'}</td>
+      <td>${p.telefono || '—'}</td>
+      <td>${p.email || '—'}</td>
+      <td>${estatusBadge(p.etapa)}</td>
+      <td>${p.valor_estimado ? formatMoney(p.valor_estimado) : '—'}</td>
+      <td><button class="btn btn-secondary btn-sm" onclick='openEdit(${JSON.stringify(p)})'>✏️ Editar</button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function renderKanban(data) {
+  const board = document.getElementById('kanban-board');
+  board.innerHTML = ETAPAS.map(etapa => {
+    const items = data.filter(p => p.etapa === etapa);
+    return `<div class="kanban-col">
+      <h4>${ETAPA_LABELS[etapa]} <span style="font-weight:400">(${items.length})</span></h4>
+      ${items.map(p => `<div class="kanban-card" onclick='openEdit(${JSON.stringify(p)})'>
+        <div class="name">${p.nombre}</div>
+        ${p.empresa ? `<div class="company">${p.empresa}</div>` : ''}
+        ${p.valor_estimado ? `<div style="font-size:11px;color:#059669;margin-top:4px;font-weight:600">${formatMoney(p.valor_estimado)}</div>` : ''}
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+function setVista(v) {
+  vistaActual = v;
+  document.getElementById('vista-tabla').style.display  = v === 'tabla'  ? '' : 'none';
+  document.getElementById('vista-kanban').style.display = v === 'kanban' ? '' : 'none';
+  document.getElementById('btn-tabla').className  = v === 'tabla'  ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+  document.getElementById('btn-kanban').className = v === 'kanban' ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+  if (v === 'kanban') renderKanban(allData);
+  else renderTabla(allData);
+}
+
+// Filters
+document.getElementById('search').addEventListener('input', applyFilters);
+document.getElementById('filter-etapa').addEventListener('change', applyFilters);
+function applyFilters() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const et = document.getElementById('filter-etapa').value;
+  renderTabla(allData.filter(p =>
+    (!q || (p.nombre||'').toLowerCase().includes(q) || (p.empresa||'').toLowerCase().includes(q)) &&
+    (!et || p.etapa === et)
+  ));
+}
+
+// Modal
+function openNew() {
+  document.getElementById('pros-modal-title').textContent = 'Nuevo Prospecto';
+  document.getElementById('pros-id').value = genProspectoId();
+  document.getElementById('pros-nombre').value = '';
+  document.getElementById('pros-empresa').value = '';
+  document.getElementById('pros-telefono').value = '';
+  document.getElementById('pros-email').value = '';
+  document.getElementById('pros-etapa').value = 'lead';
+  document.getElementById('pros-valor').value = '';
+  document.getElementById('pros-notas').value = '';
+  document.getElementById('btn-del-pros').style.display = 'none';
+  document.getElementById('modal-pros').classList.add('open');
+}
+
+function openEdit(p) {
+  document.getElementById('pros-modal-title').textContent = 'Editar Prospecto';
+  document.getElementById('pros-id').value = p.id;
+  document.getElementById('pros-nombre').value = p.nombre || '';
+  document.getElementById('pros-empresa').value = p.empresa || '';
+  document.getElementById('pros-telefono').value = p.telefono || '';
+  document.getElementById('pros-email').value = p.email || '';
+  document.getElementById('pros-etapa').value = p.etapa || 'lead';
+  document.getElementById('pros-valor').value = p.valor_estimado || '';
+  document.getElementById('pros-notas').value = p.notas || '';
+  document.getElementById('btn-del-pros').style.display = 'inline-flex';
+  document.getElementById('modal-pros').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-pros').classList.remove('open');
+}
+
+async function savePros() {
+  const nombre = document.getElementById('pros-nombre').value.trim();
+  if (!nombre) { showToast('El nombre es requerido', 'error'); return; }
+
+  const payload = {
+    id: document.getElementById('pros-id').value,
+    nombre,
+    empresa: document.getElementById('pros-empresa').value.trim(),
+    telefono: document.getElementById('pros-telefono').value.trim(),
+    email: document.getElementById('pros-email').value.trim(),
+    etapa: document.getElementById('pros-etapa').value,
+    valor_estimado: parseFloat(document.getElementById('pros-valor').value) || null,
+    notas: document.getElementById('pros-notas').value.trim(),
+    vendedor,
+  };
+
+  const { error } = await db.from('prospectos').upsert(payload);
+  if (error) { showToast('Error: ' + error.message, 'error'); return; }
+  showToast('Prospecto guardado ✓', 'success');
+  closeModal();
+  load();
+}
+
+async function deletePros() {
+  const id = document.getElementById('pros-id').value;
+  const nombre = document.getElementById('pros-nombre').value;
+  if (!confirm(`¿Eliminar prospecto "${nombre}"?`)) return;
+  const { error } = await db.from('prospectos').delete().eq('id', id);
+  if (error) { showToast('Error', 'error'); return; }
+  showToast('Prospecto eliminado', '');
+  closeModal();
+  load();
+}
+
+load();
+</script>
+</body>
+</html>

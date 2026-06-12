@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mis Pedidos — Vendedores</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1>🤝 Ventas</h1>
+    <span>Plataforma de Vendedores</span>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="dashboard.html"    class="nav-item" data-page="dashboard">   <span class="icon">📊</span> Dashboard</a>
+    <a href="cotizaciones.html" class="nav-item" data-page="cotizaciones"><span class="icon">📋</span> Cotizaciones</a>
+    <a href="pedidos.html"      class="nav-item" data-page="pedidos">     <span class="icon">📦</span> Mis Pedidos</a>
+    <a href="ventas.html"       class="nav-item" data-page="ventas">      <span class="icon">💰</span> Ventas</a>
+    <a href="crm.html"          class="nav-item" data-page="crm">         <span class="icon">👥</span> CRM</a>
+  </nav>
+  <div class="sidebar-footer" id="sidebar-user"></div>
+</aside>
+
+<main class="main">
+  <div class="page-header">
+    <h2>Mis Pedidos</h2>
+    <p>Pedidos del operativo donde estás asignado</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="filter-bar" style="margin-bottom:0">
+        <input type="text" id="search" placeholder="🔍 Buscar cliente o ID...">
+        <select id="filter-estatus">
+          <option value="">Todos los estatus</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="en proceso">En Proceso</option>
+          <option value="entregado">Entregado</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+      </div>
+      <div style="color:#6B7280;font-size:13px" id="total-label"></div>
+    </div>
+
+    <div id="tabla-ped">
+      <div class="empty-state"><div class="icon">⏳</div><p>Cargando...</p></div>
+    </div>
+  </div>
+</main>
+
+<!-- Modal Ver Detalle -->
+<div class="modal-overlay" id="modal-det">
+  <div class="modal">
+    <h3>Detalle del Pedido</h3>
+    <div class="detail-grid" id="det-content"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="document.getElementById('modal-det').classList.remove('open')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const vendedor = requireAuth();
+renderSidebarUser();
+setSidebarActive('pedidos');
+const db = initSupabase();
+
+let allData = [];
+
+async function load() {
+  const { data, error } = await db.from('pedidos')
+    .select('*')
+    .eq('vendedor', vendedor)
+    .order('created_at', { ascending: false });
+
+  if (error) { showToast('Error cargando pedidos', 'error'); return; }
+  allData = data || [];
+  render(allData);
+}
+
+function render(data) {
+  const el = document.getElementById('tabla-ped');
+  document.getElementById('total-label').textContent = data.length + ' pedido(s)';
+
+  if (!data.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📦</div><p>Sin pedidos asignados aún.</p></div>';
+    return;
+  }
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>ID</th><th>Cliente</th><th>Descripción</th><th>Total</th><th>Fecha</th><th>Estatus</th><th></th>
+    </tr></thead>
+    <tbody>${data.map(p => `<tr>
+      <td><strong style="font-family:monospace">${p.id}</strong></td>
+      <td>${p.cliente || '—'}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.descripcion || '—'}</td>
+      <td><strong>${formatMoney(p.total)}</strong></td>
+      <td>${formatDate(p.fecha)}</td>
+      <td>${estatusBadge(p.estatus)}</td>
+      <td><button class="btn btn-secondary btn-sm" onclick='verDetalle(${JSON.stringify(p)})'>Ver →</button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function verDetalle(p) {
+  document.getElementById('det-content').innerHTML = `
+    <div class="detail-item"><label>ID Pedido</label><p><strong>${p.id}</strong></p></div>
+    <div class="detail-item"><label>Estatus</label><p>${estatusBadge(p.estatus)}</p></div>
+    <div class="detail-item"><label>Cliente</label><p>${p.cliente || '—'}</p></div>
+    <div class="detail-item"><label>Fecha</label><p>${formatDate(p.fecha)}</p></div>
+    <div class="detail-item" style="grid-column:1/-1"><label>Descripción</label><p>${p.descripcion || '—'}</p></div>
+    <div class="detail-item"><label>Subtotal</label><p>${formatMoney(p.subtotal)}</p></div>
+    <div class="detail-item"><label>IVA</label><p>${formatMoney(p.iva)}</p></div>
+    <div class="detail-item"><label>Total</label><p><strong style="font-size:16px">${formatMoney(p.total)}</strong></p></div>
+    <div class="detail-item"><label>Vendedor</label><p>${p.vendedor || '—'}</p></div>
+    ${p.notas ? `<div class="detail-item" style="grid-column:1/-1"><label>Notas</label><p>${p.notas}</p></div>` : ''}
+  `;
+  document.getElementById('modal-det').classList.add('open');
+}
+
+document.getElementById('search').addEventListener('input', applyFilters);
+document.getElementById('filter-estatus').addEventListener('change', applyFilters);
+
+function applyFilters() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const est = document.getElementById('filter-estatus').value;
+  render(allData.filter(p =>
+    (!q || (p.cliente||'').toLowerCase().includes(q) || p.id.toLowerCase().includes(q)) &&
+    (!est || (p.estatus || '').toLowerCase() === est)
+  ));
+}
+
+load();
+</script>
+</body>
+</html>

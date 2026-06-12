@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Vendedores</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1>🤝 Ventas</h1>
+    <span>Plataforma de Vendedores</span>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="dashboard.html"    class="nav-item" data-page="dashboard">   <span class="icon">📊</span> Dashboard</a>
+    <a href="cotizaciones.html" class="nav-item" data-page="cotizaciones"><span class="icon">📋</span> Cotizaciones</a>
+    <a href="pedidos.html"      class="nav-item" data-page="pedidos">     <span class="icon">📦</span> Mis Pedidos</a>
+    <a href="ventas.html"       class="nav-item" data-page="ventas">      <span class="icon">💰</span> Ventas</a>
+    <a href="crm.html"          class="nav-item" data-page="crm">         <span class="icon">👥</span> CRM</a>
+  </nav>
+  <div class="sidebar-footer" id="sidebar-user"></div>
+</aside>
+
+<main class="main">
+  <div class="page-header">
+    <h2>Dashboard</h2>
+    <p id="greeting">Cargando...</p>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="label">Cotizaciones Activas</div>
+      <div class="value val-indigo" id="s-cot">—</div>
+      <div class="sub">Borrador + Enviadas</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Pedidos Activos</div>
+      <div class="value val-blue" id="s-ped">—</div>
+      <div class="sub">Sin entregar/cancelar</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Ventas del Mes</div>
+      <div class="value val-green" id="s-ven">—</div>
+      <div class="sub">Cotizaciones aprobadas</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Prospectos CRM</div>
+      <div class="value val-amber" id="s-pros">—</div>
+      <div class="sub">Activos (sin perdidos)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Cotizaciones Recientes</h3>
+      <a href="cotizaciones.html" class="btn btn-secondary btn-sm">Ver todas →</a>
+    </div>
+    <div id="tbl-cot"><div class="empty-state"><div class="icon">⏳</div><p>Cargando...</p></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Mis Pedidos Recientes</h3>
+      <a href="pedidos.html" class="btn btn-secondary btn-sm">Ver todos →</a>
+    </div>
+    <div id="tbl-ped"><div class="empty-state"><div class="icon">⏳</div><p>Cargando...</p></div></div>
+  </div>
+</main>
+
+<script>
+const vendedor = requireAuth();
+renderSidebarUser();
+setSidebarActive('dashboard');
+const db = initSupabase();
+
+const hr = new Date().getHours();
+const greet = hr < 12 ? 'Buenos días' : hr < 18 ? 'Buenas tardes' : 'Buenas noches';
+document.getElementById('greeting').textContent = `${greet}, ${vendedor}`;
+
+async function loadStats() {
+  const firstDay = currentMonth() + '-01';
+
+  const [{ count: cCount }, { count: pCount }, { data: ventas }, { count: prosCount }] = await Promise.all([
+    db.from('cotizaciones').select('*', { count: 'exact', head: true })
+      .eq('vendedor', vendedor).in('estatus', ['borrador', 'enviada']),
+    db.from('pedidos').select('*', { count: 'exact', head: true })
+      .eq('vendedor', vendedor).not('estatus', 'in', '("entregado","cancelado")'),
+    db.from('cotizaciones').select('total')
+      .eq('vendedor', vendedor).eq('estatus', 'aprobada').gte('created_at', firstDay),
+    db.from('prospectos').select('*', { count: 'exact', head: true })
+      .eq('vendedor', vendedor).neq('etapa', 'perdido'),
+  ]);
+
+  document.getElementById('s-cot').textContent  = cCount || 0;
+  document.getElementById('s-ped').textContent  = pCount || 0;
+  document.getElementById('s-ven').textContent  = formatMoney((ventas || []).reduce((s, v) => s + Number(v.total), 0));
+  document.getElementById('s-pros').textContent = prosCount || 0;
+}
+
+async function loadCotizaciones() {
+  const { data } = await db.from('cotizaciones')
+    .select('id,cliente,total,fecha,estatus')
+    .eq('vendedor', vendedor)
+    .order('created_at', { ascending: false })
+    .limit(6);
+
+  const el = document.getElementById('tbl-cot');
+  if (!data?.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>Sin cotizaciones aún. <a href="cotizaciones.html">Crear una →</a></p></div>';
+    return;
+  }
+  el.innerHTML = `<table>
+    <thead><tr><th>ID</th><th>Cliente</th><th>Total</th><th>Fecha</th><th>Estatus</th></tr></thead>
+    <tbody>${data.map(c => `<tr>
+      <td><strong>${c.id}</strong></td>
+      <td>${c.cliente || '—'}</td>
+      <td>${formatMoney(c.total)}</td>
+      <td>${formatDate(c.fecha)}</td>
+      <td>${estatusBadge(c.estatus)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function loadPedidos() {
+  const { data } = await db.from('pedidos')
+    .select('id,cliente,total,fecha,estatus')
+    .eq('vendedor', vendedor)
+    .order('created_at', { ascending: false })
+    .limit(6);
+
+  const el = document.getElementById('tbl-ped');
+  if (!data?.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📦</div><p>Sin pedidos asignados aún.</p></div>';
+    return;
+  }
+  el.innerHTML = `<table>
+    <thead><tr><th>ID</th><th>Cliente</th><th>Total</th><th>Fecha</th><th>Estatus</th></tr></thead>
+    <tbody>${data.map(p => `<tr>
+      <td><strong>${p.id}</strong></td>
+      <td>${p.cliente || '—'}</td>
+      <td>${formatMoney(p.total)}</td>
+      <td>${formatDate(p.fecha)}</td>
+      <td>${estatusBadge(p.estatus)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+loadStats();
+loadCotizaciones();
+loadPedidos();
+</script>
+</body>
+</html>

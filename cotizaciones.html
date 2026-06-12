@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cotizaciones — Vendedores</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1>🤝 Ventas</h1>
+    <span>Plataforma de Vendedores</span>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="dashboard.html"    class="nav-item" data-page="dashboard">   <span class="icon">📊</span> Dashboard</a>
+    <a href="cotizaciones.html" class="nav-item" data-page="cotizaciones"><span class="icon">📋</span> Cotizaciones</a>
+    <a href="pedidos.html"      class="nav-item" data-page="pedidos">     <span class="icon">📦</span> Mis Pedidos</a>
+    <a href="ventas.html"       class="nav-item" data-page="ventas">      <span class="icon">💰</span> Ventas</a>
+    <a href="crm.html"          class="nav-item" data-page="crm">         <span class="icon">👥</span> CRM</a>
+  </nav>
+  <div class="sidebar-footer" id="sidebar-user"></div>
+</aside>
+
+<main class="main">
+  <div class="page-header">
+    <h2>Cotizaciones</h2>
+    <p>Crea, envía y rastrea tus cotizaciones</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="filter-bar" style="margin-bottom:0">
+        <input type="text" id="search" placeholder="🔍 Buscar cliente o ID...">
+        <select id="filter-estatus">
+          <option value="">Todos los estatus</option>
+          <option value="borrador">Borrador</option>
+          <option value="enviada">Enviada</option>
+          <option value="aprobada">Aprobada</option>
+          <option value="rechazada">Rechazada</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="openNew()">+ Nueva Cotización</button>
+    </div>
+
+    <div id="tabla-cot">
+      <div class="empty-state"><div class="icon">⏳</div><p>Cargando...</p></div>
+    </div>
+  </div>
+</main>
+
+<!-- Modal Crear/Editar -->
+<div class="modal-overlay" id="modal-cot">
+  <div class="modal">
+    <h3 id="modal-title">Nueva Cotización</h3>
+    <input type="hidden" id="cot-id">
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Cliente *</label>
+        <input type="text" id="cot-cliente" placeholder="Nombre del cliente">
+      </div>
+      <div class="form-group">
+        <label>Fecha *</label>
+        <input type="date" id="cot-fecha">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Descripción / Concepto *</label>
+      <textarea id="cot-desc" placeholder="Describe el servicio o producto cotizado..." rows="3"></textarea>
+    </div>
+
+    <div class="form-row-3">
+      <div class="form-group">
+        <label>Subtotal</label>
+        <input type="number" id="cot-subtotal" placeholder="0.00" step="0.01" oninput="calcTotal()">
+      </div>
+      <div class="form-group">
+        <label>IVA (16%)</label>
+        <input type="number" id="cot-iva" placeholder="0.00" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Total</label>
+        <input type="number" id="cot-total" placeholder="0.00" step="0.01">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Estatus</label>
+        <select id="cot-estatus">
+          <option value="borrador">Borrador</option>
+          <option value="enviada">Enviada</option>
+          <option value="aprobada">Aprobada</option>
+          <option value="rechazada">Rechazada</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Notas</label>
+        <input type="text" id="cot-notas" placeholder="Notas adicionales...">
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveCot()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const vendedor = requireAuth();
+renderSidebarUser();
+setSidebarActive('cotizaciones');
+const db = initSupabase();
+
+let allData = [];
+
+async function load() {
+  const { data, error } = await db.from('cotizaciones')
+    .select('*')
+    .eq('vendedor', vendedor)
+    .order('created_at', { ascending: false });
+
+  if (error) { showToast('Error cargando datos', 'error'); return; }
+  allData = data || [];
+  render(allData);
+}
+
+function render(data) {
+  const el = document.getElementById('tabla-cot');
+  if (!data.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>Sin cotizaciones. Crea tu primera.</p></div>';
+    return;
+  }
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>ID</th><th>Cliente</th><th>Descripción</th><th>Total</th><th>Fecha</th><th>Estatus</th><th>Acciones</th>
+    </tr></thead>
+    <tbody>${data.map(c => `<tr>
+      <td><strong style="font-family:monospace">${c.id}</strong></td>
+      <td>${c.cliente || '—'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.descripcion || '—'}</td>
+      <td><strong>${formatMoney(c.total)}</strong></td>
+      <td>${formatDate(c.fecha)}</td>
+      <td>${estatusBadge(c.estatus)}</td>
+      <td>
+        <div class="actions">
+          <button class="btn btn-secondary btn-icon" title="Editar" onclick='openEdit(${JSON.stringify(c)})'>✏️</button>
+          ${c.estatus === 'borrador' ? `<button class="btn btn-primary btn-sm" onclick="enviar('${c.id}')">Enviar</button>` : ''}
+          ${c.estatus === 'enviada' ? `<button class="btn btn-success btn-sm" onclick="aprobar('${c.id}')">Aprobar</button>` : ''}
+          ${(c.estatus === 'borrador') ? `<button class="btn btn-danger btn-icon" title="Eliminar" onclick="deleteCot('${c.id}')">🗑️</button>` : ''}
+        </div>
+      </td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// Filters
+document.getElementById('search').addEventListener('input', applyFilters);
+document.getElementById('filter-estatus').addEventListener('change', applyFilters);
+
+function applyFilters() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const est = document.getElementById('filter-estatus').value;
+  const filtered = allData.filter(c =>
+    (!q || (c.cliente||'').toLowerCase().includes(q) || c.id.toLowerCase().includes(q)) &&
+    (!est || c.estatus === est)
+  );
+  render(filtered);
+}
+
+// IVA auto-calc
+function calcTotal() {
+  const sub = parseFloat(document.getElementById('cot-subtotal').value) || 0;
+  const iva = Math.round(sub * 0.16 * 100) / 100;
+  document.getElementById('cot-iva').value = iva.toFixed(2);
+  document.getElementById('cot-total').value = (sub + iva).toFixed(2);
+}
+
+// Modal
+function openNew() {
+  document.getElementById('modal-title').textContent = 'Nueva Cotización';
+  document.getElementById('cot-id').value = genId();
+  document.getElementById('cot-cliente').value = '';
+  document.getElementById('cot-fecha').value = todayISO();
+  document.getElementById('cot-desc').value = '';
+  document.getElementById('cot-subtotal').value = '';
+  document.getElementById('cot-iva').value = '';
+  document.getElementById('cot-total').value = '';
+  document.getElementById('cot-estatus').value = 'borrador';
+  document.getElementById('cot-notas').value = '';
+  document.getElementById('modal-cot').classList.add('open');
+}
+
+function openEdit(c) {
+  document.getElementById('modal-title').textContent = 'Editar Cotización';
+  document.getElementById('cot-id').value = c.id;
+  document.getElementById('cot-cliente').value = c.cliente || '';
+  document.getElementById('cot-fecha').value = c.fecha || '';
+  document.getElementById('cot-desc').value = c.descripcion || '';
+  document.getElementById('cot-subtotal').value = c.subtotal || '';
+  document.getElementById('cot-iva').value = c.iva || '';
+  document.getElementById('cot-total').value = c.total || '';
+  document.getElementById('cot-estatus').value = c.estatus || 'borrador';
+  document.getElementById('cot-notas').value = c.notas || '';
+  document.getElementById('modal-cot').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-cot').classList.remove('open');
+}
+
+async function saveCot() {
+  const id = document.getElementById('cot-id').value;
+  const payload = {
+    id,
+    cliente: document.getElementById('cot-cliente').value.trim(),
+    descripcion: document.getElementById('cot-desc').value.trim(),
+    subtotal: parseFloat(document.getElementById('cot-subtotal').value) || 0,
+    iva: parseFloat(document.getElementById('cot-iva').value) || 0,
+    total: parseFloat(document.getElementById('cot-total').value) || 0,
+    fecha: document.getElementById('cot-fecha').value,
+    vendedor,
+    estatus: document.getElementById('cot-estatus').value,
+    notas: document.getElementById('cot-notas').value.trim(),
+  };
+
+  if (!payload.cliente) { showToast('El cliente es requerido', 'error'); return; }
+
+  const { error } = await db.from('cotizaciones').upsert(payload);
+  if (error) { showToast('Error: ' + error.message, 'error'); return; }
+
+  showToast('Cotización guardada ✓', 'success');
+  closeModal();
+  load();
+}
+
+async function enviar(id) {
+  const { error } = await db.from('cotizaciones').update({ estatus: 'enviada' }).eq('id', id);
+  if (error) { showToast('Error', 'error'); return; }
+  showToast('Cotización marcada como enviada ✓', 'success');
+  load();
+}
+
+async function aprobar(id) {
+  if (!confirm('¿Marcar como aprobada? Esto registrará la venta.')) return;
+  const cot = allData.find(c => c.id === id);
+  if (!cot) return;
+
+  // Update cotización
+  const { error: e1 } = await db.from('cotizaciones').update({ estatus: 'aprobada' }).eq('id', id);
+  if (e1) { showToast('Error: ' + e1.message, 'error'); return; }
+
+  // Create pedido in operativo
+  const pedido = {
+    id: genPedidoId(),
+    cliente: cot.cliente,
+    descripcion: cot.descripcion,
+    subtotal: cot.subtotal,
+    iva: cot.iva,
+    total: cot.total,
+    fecha: todayISO(),
+    vendedor: cot.vendedor,
+    estatus: 'pendiente',
+    notas: `Generado desde cotización ${cot.id}. ${cot.notas || ''}`.trim(),
+  };
+  const { error: e2 } = await db.from('pedidos').insert(pedido);
+  if (e2) { showToast('Cotización aprobada pero hubo un error al crear pedido: ' + e2.message, 'error'); }
+  else { showToast('¡Aprobada! Pedido ' + pedido.id + ' creado en operativo ✓', 'success'); }
+
+  load();
+}
+
+async function deleteCot(id) {
+  if (!confirm('¿Eliminar esta cotización?')) return;
+  const { error } = await db.from('cotizaciones').delete().eq('id', id);
+  if (error) { showToast('Error', 'error'); return; }
+  showToast('Cotización eliminada', '');
+  load();
+}
+
+load();
+</script>
+</body>
+</html>
