@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catálogo — Vendedores</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+  <style>
+    .cat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+    .cat-section { margin-bottom:32px; }
+    .cat-section h3 { font-size:14px; font-weight:700; color:#374151; text-transform:uppercase; letter-spacing:.05em; margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid #4F46E5; display:inline-block; }
+    .mat-card { background:#fff; border-radius:10px; padding:14px 16px; box-shadow:0 1px 3px rgba(0,0,0,.07); border:1px solid #F3F4F6; transition:.15s; }
+    .mat-card:hover { border-color:#C7D2FE; box-shadow:0 4px 12px rgba(79,70,229,.1); }
+    .mat-name { font-size:13px; font-weight:600; color:#111827; }
+    .mat-meta { font-size:11px; color:#9CA3AF; margin-top:3px; }
+    .mat-price { font-size:15px; font-weight:700; color:#059669; margin-top:8px; }
+    .mat-price.sin-precio { color:#D1D5DB; font-size:12px; font-weight:400; }
+    .mat-unit { font-size:11px; color:#6B7280; font-weight:400; }
+    .filter-top { display:flex; gap:10px; margin-bottom:24px; flex-wrap:wrap; align-items:center; }
+    .filter-top input, .filter-top select { padding:9px 13px; border:1px solid #D1D5DB; border-radius:9px; font-size:13px; outline:none; background:#fff; }
+    .filter-top input { min-width:240px; flex:1; }
+    .filter-top input:focus, .filter-top select:focus { border-color:#6366F1; box-shadow:0 0 0 3px rgba(99,102,241,.1); }
+    .count-badge { background:#EEF2FF; color:#4F46E5; font-size:12px; font-weight:600; padding:3px 10px; border-radius:999px; }
+    .empty-cat { text-align:center; padding:40px; color:#9CA3AF; font-size:13px; }
+    .cot-btn { background:#4F46E5; color:#fff; border:none; border-radius:7px; padding:7px 14px; font-size:12px; font-weight:600; cursor:pointer; margin-top:10px; transition:.15s; }
+    .cot-btn:hover { background:#4338CA; }
+  </style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1>🤝 Ventas</h1>
+    <span>Plataforma de Vendedores</span>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="dashboard.html"    class="nav-item" data-page="dashboard">   <span class="icon">📊</span> Dashboard</a>
+    <a href="cotizaciones.html" class="nav-item" data-page="cotizaciones"><span class="icon">📋</span> Cotizaciones</a>
+    <a href="pedidos.html"      class="nav-item" data-page="pedidos">     <span class="icon">📦</span> Mis Pedidos</a>
+    <a href="ventas.html"       class="nav-item" data-page="ventas">      <span class="icon">💰</span> Ventas</a>
+    <a href="crm.html"          class="nav-item" data-page="crm">         <span class="icon">👥</span> CRM</a>
+    <a href="catalogo.html"     class="nav-item" data-page="catalogo">    <span class="icon">📦</span> Catálogo</a>
+  </nav>
+  <div class="sidebar-footer" id="sidebar-user"></div>
+</aside>
+
+<main class="main">
+  <div class="page-header">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div>
+        <h2>Catálogo de Materiales</h2>
+        <p>Consulta materiales y precios para cotizar</p>
+      </div>
+      <span class="count-badge" id="total-count">...</span>
+    </div>
+  </div>
+
+  <div class="filter-top">
+    <input type="text" id="search" placeholder="🔍 Buscar material..." oninput="filtrar()">
+    <select id="filter-cat" onchange="filtrar()">
+      <option value="">Todas las categorías</option>
+      <option>Paneles Aluminio</option>
+      <option>Acrílicos</option>
+      <option>Láminas Aluminio</option>
+      <option>PVC</option>
+      <option>MDF</option>
+      <option>LEDs Módulos</option>
+      <option>Neones Flex</option>
+      <option>Tiras LED</option>
+      <option>Transformadores</option>
+      <option>Vinil Corte</option>
+      <option>Vinil Traslúcido</option>
+      <option>Viniles Especiales</option>
+      <option>Películas Cristal</option>
+      <option>Lonas</option>
+      <option>Publicidad y Displays</option>
+    </select>
+    <select id="filter-precio" onchange="filtrar()">
+      <option value="">Todos</option>
+      <option value="con">Con precio</option>
+      <option value="sin">Sin precio</option>
+    </select>
+  </div>
+
+  <div id="catalogo-content">
+    <div class="empty-state"><div class="icon">⏳</div><p>Cargando catálogo...</p></div>
+  </div>
+</main>
+
+<script>
+const vendedor = requireAuth();
+renderSidebarUser();
+setSidebarActive('catalogo');
+const db = initSupabase();
+
+let todos = [];
+
+async function load() {
+  const { data } = await db.from('materiales').select('*').eq('activo', true).order('categoria').order('nombre');
+  todos = data || [];
+  document.getElementById('total-count').textContent = todos.length + ' materiales';
+  filtrar();
+}
+
+function filtrar() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const cat = document.getElementById('filter-cat').value;
+  const precio = document.getElementById('filter-precio').value;
+
+  const lista = todos.filter(m =>
+    (!q || m.nombre.toLowerCase().includes(q) || m.categoria.toLowerCase().includes(q)) &&
+    (!cat || m.categoria === cat) &&
+    (!precio || (precio === 'con' ? m.costo != null : m.costo == null))
+  );
+
+  document.getElementById('total-count').textContent = lista.length + ' materiales';
+  render(lista);
+}
+
+function render(lista) {
+  const el = document.getElementById('catalogo-content');
+
+  if (!lista.length) {
+    el.innerHTML = '<div class="empty-cat">Sin resultados para esa búsqueda.</div>';
+    return;
+  }
+
+  // Agrupar por categoría
+  const grupos = {};
+  lista.forEach(m => {
+    if (!grupos[m.categoria]) grupos[m.categoria] = [];
+    grupos[m.categoria].push(m);
+  });
+
+  el.innerHTML = Object.entries(grupos).map(([cat, items]) => `
+    <div class="cat-section">
+      <h3>${cat} <span style="font-size:11px;font-weight:400;color:#9CA3AF;text-transform:none;letter-spacing:0">(${items.length})</span></h3>
+      <div class="cat-grid">
+        ${items.map(m => `
+          <div class="mat-card">
+            <div class="mat-name">${m.nombre}</div>
+            <div class="mat-meta">${m.categoria}</div>
+            ${m.costo != null
+              ? `<div class="mat-price">${formatMoney(m.costo)} <span class="mat-unit">/ ${m.unidad}</span></div>`
+              : `<div class="mat-price sin-precio">Precio no asignado</div>`
+            }
+            <button class="cot-btn" onclick="cotizarMaterial('${encodeURIComponent(m.nombre)}')">+ Agregar a cotización</button>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function cotizarMaterial(nombre) {
+  // Ir a cotizaciones con el material pre-seleccionado
+  sessionStorage.setItem('mat_preselect', decodeURIComponent(nombre));
+  window.location.href = 'cotizaciones.html';
+}
+
+load();
+</script>
+</body>
+</html>
