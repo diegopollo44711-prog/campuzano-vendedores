@@ -75,7 +75,7 @@ let allData = [];
 async function load() {
   const { data, error } = await db.from('pedidos')
     .select('*')
-    .eq('vendedor', vendedor)
+    .eq('responsable', vendedor)
     .order('num', { ascending: false });
 
   if (error) { showToast('Error cargando pedidos', 'error'); return; }

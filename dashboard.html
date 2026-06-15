@@ -89,7 +89,7 @@ async function loadStats() {
     db.from('cotizaciones').select('*', { count: 'exact', head: true })
       .eq('vendedor', vendedor).in('estatus', ['borrador', 'enviada']),
     db.from('pedidos').select('*', { count: 'exact', head: true })
-      .eq('vendedor', vendedor).not('estatus', 'in', '("entregado","cancelado")'),
+      .eq('responsable', vendedor).not('estatus', 'in', '("entregado","cancelado")'),
     db.from('cotizaciones').select('total')
       .eq('vendedor', vendedor).eq('estatus', 'aprobada').gte('created_at', firstDay),
     db.from('prospectos').select('*', { count: 'exact', head: true })
