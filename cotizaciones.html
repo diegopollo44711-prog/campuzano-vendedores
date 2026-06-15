@@ -7,6 +7,40 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
+  <style>
+    /* Partidas table */
+    .partidas-table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+    .partidas-table th { font-size:11px; font-weight:600; color:#6B7280; text-transform:uppercase; letter-spacing:.04em; padding:7px 10px; border-bottom:1px solid #E5E7EB; text-align:left; }
+    .partidas-table td { padding:7px 10px; font-size:13px; border-bottom:1px solid #F3F4F6; vertical-align:middle; }
+    .partidas-table tr:last-child td { border-bottom:none; }
+    .partidas-table input[type="number"] { width:80px; padding:5px 8px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px; text-align:right; outline:none; }
+    .partidas-table input[type="number"]:focus { border-color:#6366F1; }
+    .partidas-table input[type="text"] { width:100%; padding:5px 8px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px; outline:none; }
+    .partidas-table input[type="text"]:focus { border-color:#6366F1; }
+    .totales-box { background:#F9FAFB; border-radius:10px; padding:14px 16px; margin-top:12px; }
+    .totales-row { display:flex; justify-content:space-between; font-size:13px; padding:3px 0; }
+    .totales-row.total { font-size:16px; font-weight:700; border-top:1px solid #E5E7EB; margin-top:6px; padding-top:8px; }
+    .add-buttons { display:flex; gap:8px; margin-top:8px; }
+    /* Material picker modal */
+    .picker-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1100; align-items:center; justify-content:center; }
+    .picker-overlay.open { display:flex; }
+    .picker-modal { background:#fff; border-radius:16px; padding:22px; width:100%; max-width:540px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.2); }
+    .picker-modal h3 { font-size:15px; font-weight:700; margin-bottom:14px; }
+    .picker-filters { display:flex; gap:8px; margin-bottom:12px; }
+    .picker-filters input, .picker-filters select { padding:7px 10px; border:1px solid #D1D5DB; border-radius:8px; font-size:13px; outline:none; }
+    .picker-filters input { flex:1; }
+    .picker-list { flex:1; overflow-y:auto; border:1px solid #E5E7EB; border-radius:10px; }
+    .picker-item { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid #F3F4F6; cursor:pointer; transition:.15s; }
+    .picker-item:last-child { border-bottom:none; }
+    .picker-item:hover { background:#EEF2FF; }
+    .picker-item .pname { font-size:13px; font-weight:500; }
+    .picker-item .pmeta { font-size:11px; color:#9CA3AF; margin-top:2px; }
+    .picker-item .pprice { font-size:13px; font-weight:600; color:#059669; }
+    .picker-item .pprice.sin-precio { color:#D1D5DB; }
+    .picker-empty { padding:24px; text-align:center; color:#9CA3AF; font-size:13px; }
+    .btn-del-partida { background:none; border:none; color:#EF4444; cursor:pointer; font-size:16px; padding:2px 6px; border-radius:4px; }
+    .btn-del-partida:hover { background:#FEE2E2; }
+  </style>
 </head>
 <body>
 
@@ -21,6 +55,7 @@
     <a href="pedidos.html"      class="nav-item" data-page="pedidos">     <span class="icon">📦</span> Mis Pedidos</a>
     <a href="ventas.html"       class="nav-item" data-page="ventas">      <span class="icon">💰</span> Ventas</a>
     <a href="crm.html"          class="nav-item" data-page="crm">         <span class="icon">👥</span> CRM</a>
+    <a href="catalogo.html"     class="nav-item" data-page="catalogo">    <span class="icon">📦</span> Catálogo</a>
   </nav>
   <div class="sidebar-footer" id="sidebar-user"></div>
 </aside>
@@ -45,16 +80,15 @@
       </div>
       <button class="btn btn-primary" onclick="openNew()">+ Nueva Cotización</button>
     </div>
-
     <div id="tabla-cot">
       <div class="empty-state"><div class="icon">⏳</div><p>Cargando...</p></div>
     </div>
   </div>
 </main>
 
-<!-- Modal Crear/Editar -->
+<!-- ── MODAL COTIZACIÓN ── -->
 <div class="modal-overlay" id="modal-cot">
-  <div class="modal">
+  <div class="modal" style="max-width:680px">
     <h3 id="modal-title">Nueva Cotización</h3>
     <input type="hidden" id="cot-id">
 
@@ -69,23 +103,30 @@
       </div>
     </div>
 
+    <!-- PARTIDAS -->
     <div class="form-group">
-      <label>Descripción / Concepto *</label>
-      <textarea id="cot-desc" placeholder="Describe el servicio o producto cotizado..." rows="3"></textarea>
-    </div>
-
-    <div class="form-row-3">
-      <div class="form-group">
-        <label>Subtotal</label>
-        <input type="number" id="cot-subtotal" placeholder="0.00" step="0.01" oninput="calcTotal()">
+      <label>Partidas / Conceptos</label>
+      <table class="partidas-table" id="partidas-table">
+        <thead>
+          <tr>
+            <th style="width:40%">Descripción</th>
+            <th style="width:12%">Cant.</th>
+            <th style="width:12%">Unidad</th>
+            <th style="width:16%">P/U</th>
+            <th style="width:14%">Subtotal</th>
+            <th style="width:6%"></th>
+          </tr>
+        </thead>
+        <tbody id="partidas-body"></tbody>
+      </table>
+      <div class="add-buttons">
+        <button class="btn btn-secondary btn-sm" onclick="openPicker()">🔍 Buscar material</button>
+        <button class="btn btn-secondary btn-sm" onclick="agregarLineaManual()">+ Línea manual</button>
       </div>
-      <div class="form-group">
-        <label>IVA (16%)</label>
-        <input type="number" id="cot-iva" placeholder="0.00" step="0.01">
-      </div>
-      <div class="form-group">
-        <label>Total</label>
-        <input type="number" id="cot-total" placeholder="0.00" step="0.01">
+      <div class="totales-box">
+        <div class="totales-row"><span>Subtotal</span><span id="tot-subtotal">$0.00</span></div>
+        <div class="totales-row"><span>IVA (16%)</span><span id="tot-iva">$0.00</span></div>
+        <div class="totales-row total"><span>Total</span><span id="tot-total">$0.00</span></div>
       </div>
     </div>
 
@@ -112,6 +153,40 @@
   </div>
 </div>
 
+<!-- ── MODAL PICKER DE MATERIALES ── -->
+<div class="picker-overlay" id="picker-modal">
+  <div class="picker-modal">
+    <h3>📦 Seleccionar Material</h3>
+    <div class="picker-filters">
+      <input type="text" id="picker-search" placeholder="Buscar..." oninput="filterPicker()">
+      <select id="picker-cat" onchange="filterPicker()">
+        <option value="">Todas las categorías</option>
+        <option>Paneles Aluminio</option>
+        <option>Acrílicos</option>
+        <option>Láminas Aluminio</option>
+        <option>PVC</option>
+        <option>MDF</option>
+        <option>LEDs Módulos</option>
+        <option>Neones Flex</option>
+        <option>Tiras LED</option>
+        <option>Transformadores</option>
+        <option>Vinil Corte</option>
+        <option>Vinil Traslúcido</option>
+        <option>Viniles Especiales</option>
+        <option>Películas Cristal</option>
+        <option>Lonas</option>
+        <option>Publicidad y Displays</option>
+      </select>
+    </div>
+    <div class="picker-list" id="picker-list">
+      <div class="picker-empty">Cargando materiales...</div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+      <button class="btn btn-secondary btn-sm" onclick="closePicker()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const vendedor = requireAuth();
 renderSidebarUser();
@@ -119,14 +194,18 @@ setSidebarActive('cotizaciones');
 const db = initSupabase();
 
 let allData = [];
+let partidas = [];
+let todosLosMateriales = [];
 
+// ── Cargar materiales del catálogo ─────────────────────────────────────
+async function loadMateriales() {
+  const { data } = await db.from('materiales').select('*').eq('activo', true).order('categoria').order('nombre');
+  todosLosMateriales = data || [];
+}
+
+// ── Cotizaciones ───────────────────────────────────────────────────────
 async function load() {
-  const { data, error } = await db.from('cotizaciones')
-    .select('*')
-    .eq('vendedor', vendedor)
-    .order('created_at', { ascending: false });
-
-  if (error) { showToast('Error cargando datos', 'error'); return; }
+  const { data } = await db.from('cotizaciones').select('*').eq('vendedor', vendedor).order('created_at', { ascending: false });
   allData = data || [];
   render(allData);
 }
@@ -139,61 +218,140 @@ function render(data) {
   }
   el.innerHTML = `<table>
     <thead><tr>
-      <th>ID</th><th>Cliente</th><th>Descripción</th><th>Total</th><th>Fecha</th><th>Estatus</th><th>Acciones</th>
+      <th>ID</th><th>Cliente</th><th>Partidas</th><th>Total</th><th>Fecha</th><th>Estatus</th><th>Acciones</th>
     </tr></thead>
     <tbody>${data.map(c => `<tr>
-      <td><strong style="font-family:monospace">${c.id}</strong></td>
+      <td><strong style="font-family:monospace;font-size:12px">${c.id}</strong></td>
       <td>${c.cliente || '—'}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.descripcion || '—'}</td>
+      <td style="color:#6B7280;font-size:12px">${(c.partidas||[]).length} concepto(s)</td>
       <td><strong>${formatMoney(c.total)}</strong></td>
       <td>${formatDate(c.fecha)}</td>
       <td>${estatusBadge(c.estatus)}</td>
       <td>
         <div class="actions">
           <button class="btn btn-secondary btn-icon" title="Editar" onclick='openEdit(${JSON.stringify(c)})'>✏️</button>
-          ${c.estatus === 'borrador' ? `<button class="btn btn-primary btn-sm" onclick="enviar('${c.id}')">Enviar</button>` : ''}
-          ${c.estatus === 'enviada' ? `<button class="btn btn-success btn-sm" onclick="aprobar('${c.id}')">Aprobar</button>` : ''}
-          ${(c.estatus === 'borrador') ? `<button class="btn btn-danger btn-icon" title="Eliminar" onclick="deleteCot('${c.id}')">🗑️</button>` : ''}
+          ${c.estatus==='borrador' ? `<button class="btn btn-primary btn-sm" onclick="enviar('${c.id}')">Enviar</button>` : ''}
+          ${c.estatus==='enviada' ? `<button class="btn btn-success btn-sm" onclick="aprobar('${c.id}')">Aprobar</button>` : ''}
+          ${c.estatus==='borrador' ? `<button class="btn btn-danger btn-icon" onclick="deleteCot('${c.id}')">🗑️</button>` : ''}
         </div>
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
 
-// Filters
 document.getElementById('search').addEventListener('input', applyFilters);
 document.getElementById('filter-estatus').addEventListener('change', applyFilters);
-
 function applyFilters() {
   const q = document.getElementById('search').value.toLowerCase();
   const est = document.getElementById('filter-estatus').value;
-  const filtered = allData.filter(c =>
+  render(allData.filter(c =>
     (!q || (c.cliente||'').toLowerCase().includes(q) || c.id.toLowerCase().includes(q)) &&
     (!est || c.estatus === est)
-  );
-  render(filtered);
+  ));
 }
 
-// IVA auto-calc
-function calcTotal() {
-  const sub = parseFloat(document.getElementById('cot-subtotal').value) || 0;
+// ── Partidas ───────────────────────────────────────────────────────────
+function renderPartidas() {
+  const tbody = document.getElementById('partidas-body');
+  if (!partidas.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:14px;text-align:center;color:#9CA3AF;font-size:13px">Sin conceptos. Agrega materiales o líneas manuales.</td></tr>`;
+  } else {
+    tbody.innerHTML = partidas.map((p, i) => `<tr>
+      <td><input type="text" value="${p.nombre}" onchange="partidas[${i}].nombre=this.value;recalc()"></td>
+      <td><input type="number" value="${p.cantidad}" min="0.01" step="0.01" onchange="partidas[${i}].cantidad=parseFloat(this.value)||0;partidas[${i}].subtotal=partidas[${i}].cantidad*partidas[${i}].precio_unitario;renderPartidas()"></td>
+      <td style="color:#6B7280;font-size:12px">${p.unidad}</td>
+      <td><input type="number" value="${p.precio_unitario}" min="0" step="0.01" onchange="partidas[${i}].precio_unitario=parseFloat(this.value)||0;partidas[${i}].subtotal=partidas[${i}].cantidad*partidas[${i}].precio_unitario;renderPartidas()"></td>
+      <td style="font-weight:600">${formatMoney(p.subtotal)}</td>
+      <td><button class="btn-del-partida" onclick="eliminarPartida(${i})">×</button></td>
+    </tr>`).join('');
+  }
+  recalc();
+}
+
+function recalc() {
+  const sub = partidas.reduce((s, p) => s + (p.subtotal || 0), 0);
   const iva = Math.round(sub * 0.16 * 100) / 100;
-  document.getElementById('cot-iva').value = iva.toFixed(2);
-  document.getElementById('cot-total').value = (sub + iva).toFixed(2);
+  const total = sub + iva;
+  document.getElementById('tot-subtotal').textContent = formatMoney(sub);
+  document.getElementById('tot-iva').textContent = formatMoney(iva);
+  document.getElementById('tot-total').textContent = formatMoney(total);
 }
 
-// Modal
+function eliminarPartida(i) {
+  partidas.splice(i, 1);
+  renderPartidas();
+}
+
+function agregarLineaManual() {
+  partidas.push({ nombre: '', cantidad: 1, unidad: 'pza', precio_unitario: 0, subtotal: 0 });
+  renderPartidas();
+  // Focus en el último input de nombre
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('#partidas-body input[type="text"]');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  }, 50);
+}
+
+// ── Material Picker ────────────────────────────────────────────────────
+function openPicker() {
+  document.getElementById('picker-search').value = '';
+  document.getElementById('picker-cat').value = '';
+  filterPicker();
+  document.getElementById('picker-modal').classList.add('open');
+}
+
+function closePicker() {
+  document.getElementById('picker-modal').classList.remove('open');
+}
+
+function filterPicker() {
+  const q = document.getElementById('picker-search').value.toLowerCase();
+  const cat = document.getElementById('picker-cat').value;
+  const lista = todosLosMateriales.filter(m =>
+    (!q || m.nombre.toLowerCase().includes(q)) &&
+    (!cat || m.categoria === cat)
+  );
+  const el = document.getElementById('picker-list');
+  if (!lista.length) {
+    el.innerHTML = '<div class="picker-empty">Sin resultados</div>';
+    return;
+  }
+  el.innerHTML = lista.map(m => `
+    <div class="picker-item" onclick="seleccionarMaterial('${m.id}')">
+      <div>
+        <div class="pname">${m.nombre}</div>
+        <div class="pmeta">${m.categoria} · ${m.unidad}</div>
+      </div>
+      <div class="pprice ${m.costo == null ? 'sin-precio' : ''}">
+        ${m.costo != null ? formatMoney(m.costo) + '/' + m.unidad : 'Sin precio'}
+      </div>
+    </div>`).join('');
+}
+
+function seleccionarMaterial(id) {
+  const m = todosLosMateriales.find(x => x.id === id);
+  if (!m) return;
+  partidas.push({
+    nombre: m.nombre,
+    cantidad: 1,
+    unidad: m.unidad,
+    precio_unitario: m.costo || 0,
+    subtotal: m.costo || 0
+  });
+  renderPartidas();
+  closePicker();
+}
+
+// ── Modal cotización ───────────────────────────────────────────────────
 function openNew() {
   document.getElementById('modal-title').textContent = 'Nueva Cotización';
   document.getElementById('cot-id').value = genId();
   document.getElementById('cot-cliente').value = '';
   document.getElementById('cot-fecha').value = todayISO();
-  document.getElementById('cot-desc').value = '';
-  document.getElementById('cot-subtotal').value = '';
-  document.getElementById('cot-iva').value = '';
-  document.getElementById('cot-total').value = '';
   document.getElementById('cot-estatus').value = 'borrador';
   document.getElementById('cot-notas').value = '';
+  partidas = [];
+  renderPartidas();
   document.getElementById('modal-cot').classList.add('open');
 }
 
@@ -202,12 +360,13 @@ function openEdit(c) {
   document.getElementById('cot-id').value = c.id;
   document.getElementById('cot-cliente').value = c.cliente || '';
   document.getElementById('cot-fecha').value = c.fecha || '';
-  document.getElementById('cot-desc').value = c.descripcion || '';
-  document.getElementById('cot-subtotal').value = c.subtotal || '';
-  document.getElementById('cot-iva').value = c.iva || '';
-  document.getElementById('cot-total').value = c.total || '';
   document.getElementById('cot-estatus').value = c.estatus || 'borrador';
   document.getElementById('cot-notas').value = c.notas || '';
+  partidas = Array.isArray(c.partidas) && c.partidas.length
+    ? JSON.parse(JSON.stringify(c.partidas))
+    : c.descripcion ? [{ nombre: c.descripcion, cantidad: 1, unidad: 'pza', precio_unitario: c.total || 0, subtotal: c.total || 0 }]
+    : [];
+  renderPartidas();
   document.getElementById('modal-cot').classList.add('open');
 }
 
@@ -216,25 +375,31 @@ function closeModal() {
 }
 
 async function saveCot() {
-  const id = document.getElementById('cot-id').value;
+  const cliente = document.getElementById('cot-cliente').value.trim();
+  if (!cliente) { showToast('El cliente es requerido', 'error'); return; }
+  if (!partidas.length) { showToast('Agrega al menos un concepto', 'error'); return; }
+
+  const sub = partidas.reduce((s, p) => s + (p.subtotal || 0), 0);
+  const iva = Math.round(sub * 0.16 * 100) / 100;
+  const total = sub + iva;
+  const descripcion = partidas.map(p => `${p.nombre} (${p.cantidad} ${p.unidad})`).join(', ');
+
   const payload = {
-    id,
-    cliente: document.getElementById('cot-cliente').value.trim(),
-    descripcion: document.getElementById('cot-desc').value.trim(),
-    subtotal: parseFloat(document.getElementById('cot-subtotal').value) || 0,
-    iva: parseFloat(document.getElementById('cot-iva').value) || 0,
-    total: parseFloat(document.getElementById('cot-total').value) || 0,
+    id: document.getElementById('cot-id').value,
+    cliente,
+    descripcion,
+    partidas,
+    subtotal: sub,
+    iva,
+    total,
     fecha: document.getElementById('cot-fecha').value,
     vendedor,
     estatus: document.getElementById('cot-estatus').value,
     notas: document.getElementById('cot-notas').value.trim(),
   };
 
-  if (!payload.cliente) { showToast('El cliente es requerido', 'error'); return; }
-
   const { error } = await db.from('cotizaciones').upsert(payload);
   if (error) { showToast('Error: ' + error.message, 'error'); return; }
-
   showToast('Cotización guardada ✓', 'success');
   closeModal();
   load();
@@ -248,31 +413,30 @@ async function enviar(id) {
 }
 
 async function aprobar(id) {
-  if (!confirm('¿Marcar como aprobada? Esto registrará la venta.')) return;
+  if (!confirm('¿Marcar como aprobada? Esto registrará la venta y creará el pedido en operaciones.')) return;
   const cot = allData.find(c => c.id === id);
   if (!cot) return;
 
-  // Update cotización
   const { error: e1 } = await db.from('cotizaciones').update({ estatus: 'aprobada' }).eq('id', id);
   if (e1) { showToast('Error: ' + e1.message, 'error'); return; }
 
-  // Create pedido in operativo
-  const pedido = {
-    id: genPedidoId(),
-    cliente: cot.cliente,
-    descripcion: cot.descripcion,
-    subtotal: cot.subtotal,
-    iva: cot.iva,
-    total: cot.total,
-    fecha: todayISO(),
-    vendedor: cot.vendedor,
-    estatus: 'pendiente',
-    notas: `Generado desde cotización ${cot.id}. ${cot.notas || ''}`.trim(),
-  };
-  const { error: e2 } = await db.from('pedidos').insert(pedido);
-  if (e2) { showToast('Cotización aprobada pero hubo un error al crear pedido: ' + e2.message, 'error'); }
-  else { showToast('¡Aprobada! Pedido ' + pedido.id + ' creado en operativo ✓', 'success'); }
+  const { data: existentes } = await db.from('pedidos').select('num').order('num', { ascending: false }).limit(1);
+  let nextNum = 1;
+  if (existentes?.length) nextNum = (parseInt((existentes[0].num||'#000').replace('#',''))||0) + 1;
+  const numStr = '#' + String(nextNum).padStart(3, '0');
 
+  const pedido = {
+    num: numStr, cliente: cot.cliente, tipo: 'Venta',
+    descripcion: cot.descripcion, entrega: 'Agendar', estatus: 'En espera',
+    pendientes: '', seguimiento: todayISO(), responsable: cot.vendedor,
+    urgencia: '🟡 Esta semana', obs: `Cotización ${cot.id}. ${cot.notas||''}`.trim(),
+    precio: cot.total||0, fecha_cierre: null, done: false, factura: false,
+    factura_estado: 'pendiente', adjuntos: [], last_modified_by: cot.vendedor,
+  };
+
+  const { error: e2 } = await db.from('pedidos').insert(pedido);
+  if (e2) showToast('Aprobada pero error al crear pedido: ' + e2.message, 'error');
+  else showToast(`¡Aprobada! Pedido ${numStr} creado en operaciones ✓`, 'success');
   load();
 }
 
@@ -284,6 +448,8 @@ async function deleteCot(id) {
   load();
 }
 
+// ── Init ───────────────────────────────────────────────────────────────
+loadMateriales();
 load();
 </script>
 </body>
