@@ -7,16 +7,28 @@ function initSupabase() {
   return _sb;
 }
 
-function getVendedor() { return localStorage.getItem('vendedor_nombre'); }
+function getVendedorSession() {
+  try { return JSON.parse(localStorage.getItem('vendedor_session') || 'null'); } catch(e) { return null; }
+}
+
+function getVendedor() {
+  const s = getVendedorSession();
+  return s ? s.nombre : null;
+}
+
+function getVendedorId() {
+  const s = getVendedorSession();
+  return s ? s.id : null;
+}
 
 function requireAuth() {
-  const v = getVendedor();
-  if (!v) { window.location.href = 'index.html'; return null; }
-  return v;
+  const s = getVendedorSession();
+  if (!s || !s.nombre) { window.location.href = 'index.html'; return null; }
+  return s.nombre;
 }
 
 function logout() {
-  localStorage.removeItem('vendedor_nombre');
+  localStorage.removeItem('vendedor_session');
   window.location.href = 'index.html';
 }
 

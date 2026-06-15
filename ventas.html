@@ -21,6 +21,7 @@
     <a href="pedidos.html"      class="nav-item" data-page="pedidos">     <span class="icon">📦</span> Mis Pedidos</a>
     <a href="ventas.html"       class="nav-item" data-page="ventas">      <span class="icon">💰</span> Ventas</a>
     <a href="crm.html"          class="nav-item" data-page="crm">         <span class="icon">👥</span> CRM</a>
+    <a href="catalogo.html"     class="nav-item" data-page="catalogo">    <span class="icon">📦</span> Catálogo</a>
   </nav>
   <div class="sidebar-footer" id="sidebar-user"></div>
 </aside>
@@ -167,7 +168,7 @@ async function loadVentas() {
 }
 
 async function registrarVenta(cotId) {
-  if (!confirm('¿El cliente aprobó esta cotización? Se creará un pedido en el sistema operativo.')) return;
+  if (!confirm('¿El cliente aprobó esta cotización? Se creará un pedido en operaciones.')) return;
 
   const { data: cots } = await db.from('cotizaciones').select('*').eq('id', cotId).single();
   if (!cots) { showToast('No se encontró la cotización', 'error'); return; }
@@ -175,22 +176,40 @@ async function registrarVenta(cotId) {
   const { error: e1 } = await db.from('cotizaciones').update({ estatus: 'aprobada' }).eq('id', cotId);
   if (e1) { showToast('Error: ' + e1.message, 'error'); return; }
 
+  // Generar siguiente número de pedido
+  const { data: existentes } = await db.from('pedidos').select('num').order('num', { ascending: false }).limit(1);
+  let nextNum = 1;
+  if (existentes && existentes.length > 0) {
+    const last = existentes[0].num || '#000';
+    nextNum = (parseInt(last.replace('#', '')) || 0) + 1;
+  }
+  const numStr = '#' + String(nextNum).padStart(3, '0');
+
+  // Pedido con esquema de operaciones
   const pedido = {
-    id: genPedidoId(),
+    num: numStr,
     cliente: cots.cliente,
+    tipo: 'Venta',
     descripcion: cots.descripcion,
-    subtotal: cots.subtotal,
-    iva: cots.iva,
-    total: cots.total,
-    fecha: todayISO(),
-    vendedor: cots.vendedor,
-    estatus: 'pendiente',
-    notas: `Generado desde cotización ${cots.id}. ${cots.notas || ''}`.trim(),
+    entrega: 'Agendar',
+    estatus: 'En espera',
+    pendientes: '',
+    seguimiento: todayISO(),
+    responsable: cots.vendedor,
+    urgencia: '🟡 Esta semana',
+    obs: `Cotización ${cots.id}. ${cots.notas || ''}`.trim(),
+    precio: cots.total || 0,
+    fecha_cierre: null,
+    done: false,
+    factura: false,
+    factura_estado: 'pendiente',
+    adjuntos: [],
+    last_modified_by: cots.vendedor,
   };
 
   const { error: e2 } = await db.from('pedidos').insert(pedido);
   if (e2) { showToast('Venta registrada, error al crear pedido: ' + e2.message, 'error'); }
-  else { showToast(`¡Venta registrada! Pedido ${pedido.id} creado ✓`, 'success'); }
+  else { showToast(`¡Venta registrada! Pedido ${numStr} creado en operaciones ✓`, 'success'); }
 
   loadStats();
   loadPendientes();

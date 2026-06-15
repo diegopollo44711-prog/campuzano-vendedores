@@ -3,51 +3,210 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Plataforma de Vendedores</title>
-  <link rel="stylesheet" href="style.css">
+  <title>Plataforma de Vendedores — Campuzano</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%);
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .card {
+      background: #fff; border-radius: 20px; padding: 36px 32px;
+      width: 100%; max-width: 360px;
+      box-shadow: 0 25px 60px rgba(0,0,0,.35);
+    }
+    .logo { text-align: center; margin-bottom: 28px; }
+    .logo-emoji { font-size: 40px; }
+    .logo h1 { font-size: 20px; font-weight: 800; color: #1E1B4B; margin-top: 8px; }
+    .logo p { color: #6B7280; font-size: 13px; margin-top: 4px; }
+
+    /* Step 1 — select vendedor */
+    .vendedor-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+    .vendedor-btn {
+      padding: 12px 16px; border: 2px solid #E5E7EB; border-radius: 10px;
+      background: #fff; font-size: 14px; font-weight: 600; color: #1E1B4B;
+      cursor: pointer; transition: all .15s; text-align: left;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .vendedor-btn:hover { border-color: #4F46E5; background: #EEF2FF; }
+    .vendedor-btn .avatar {
+      width: 32px; height: 32px; border-radius: 50%; background: #4F46E5;
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; flex-shrink: 0;
+    }
+    .loading-msg { text-align: center; color: #9CA3AF; font-size: 13px; padding: 20px 0; }
+
+    /* Step 2 — PIN */
+    .pin-header { text-align: center; margin-bottom: 20px; }
+    .pin-header .name { font-size: 16px; font-weight: 700; color: #1E1B4B; }
+    .pin-header .sub { font-size: 12px; color: #6B7280; margin-top: 2px; }
+    .pin-dots { display: flex; gap: 12px; justify-content: center; margin: 16px 0 20px; }
+    .pin-dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid #D1D5DB; transition: all .2s;
+    }
+    .pin-dot.filled { background: #4F46E5; border-color: #4F46E5; }
+    .pin-dot.error  { background: #EF4444; border-color: #EF4444; }
+    .pin-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+    .pin-key {
+      background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px;
+      font-size: 20px; font-weight: 700; color: #1E1B4B;
+      padding: 16px; cursor: pointer; transition: all .15s;
+    }
+    .pin-key:hover { background: #EEF2FF; border-color: #4F46E5; }
+    .pin-key:active { transform: scale(.93); }
+    .pin-key.del { font-size: 14px; color: #9CA3AF; font-weight: 500; }
+    .pin-error { color: #EF4444; font-size: 12px; text-align: center; margin-top: 10px; min-height: 18px; }
+    .btn-back {
+      width: 100%; margin-top: 14px; padding: 10px;
+      background: none; border: 1px solid #E5E7EB; border-radius: 8px;
+      color: #6B7280; font-size: 13px; cursor: pointer; transition: .15s;
+    }
+    .btn-back:hover { border-color: #9CA3AF; color: #374151; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+    .shake { animation: shake .4s; }
+    [hidden] { display: none !important; }
+  </style>
 </head>
 <body>
-<div class="login-page">
-  <div class="login-card">
-    <div class="logo">
-      <div class="emoji">🤝</div>
-      <h1>Plataforma de Ventas</h1>
-      <p>Campuzano — Área de Vendedores</p>
+<div class="card">
+  <div class="logo">
+    <div class="logo-emoji">🤝</div>
+    <h1>Plataforma de Ventas</h1>
+    <p>Campuzano Diseño & Publicidad</p>
+  </div>
+
+  <!-- Paso 1: seleccionar vendedor -->
+  <div id="step-select">
+    <div id="vendedor-list" class="vendedor-list">
+      <div class="loading-msg">Cargando vendedores...</div>
     </div>
-    <div class="form-group">
-      <label>Tu nombre completo</label>
-      <input type="text" id="nombre" placeholder="Ej. Juan Pérez" autofocus>
+  </div>
+
+  <!-- Paso 2: PIN -->
+  <div id="step-pin" hidden>
+    <div class="pin-header">
+      <div class="name" id="pin-name"></div>
+      <div class="sub">Ingresa tu PIN</div>
     </div>
-    <button class="btn btn-primary" id="btn-login"
-      style="width:100%;justify-content:center;padding:11px;font-size:14px;">
-      Entrar →
-    </button>
-    <p style="text-align:center;color:#9CA3AF;font-size:12px;margin-top:14px;">
-      Tu nombre se usa para filtrar tus cotizaciones y pedidos.
-    </p>
+    <div class="pin-dots" id="pin-dots">
+      <div class="pin-dot"></div>
+      <div class="pin-dot"></div>
+      <div class="pin-dot"></div>
+      <div class="pin-dot"></div>
+    </div>
+    <div class="pin-grid" id="pin-grid"></div>
+    <div class="pin-error" id="pin-error"></div>
+    <button class="btn-back" onclick="goBack()">← Cambiar vendedor</button>
   </div>
 </div>
 
 <script>
-  if (localStorage.getItem('vendedor_nombre')) {
-    window.location.href = 'dashboard.html';
-  }
+const SUPABASE_URL = 'https://iyuhvqsyowaqrwjdujpg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5dWh2cXN5b3dhcXJ3amR1anBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1ODcxNjMsImV4cCI6MjA5NjE2MzE2M30.U4-cBqehEe1MXCD6-wlGSjrMh3rKyILKl860JmdPq5A';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  document.getElementById('nombre').addEventListener('keydown', e => {
-    if (e.key === 'Enter') login();
+// Si ya hay sesión activa, ir al dashboard
+const sesion = localStorage.getItem('vendedor_session');
+if (sesion) {
+  try {
+    const v = JSON.parse(sesion);
+    if (v.id && v.nombre) window.location.href = 'dashboard.html';
+  } catch(e) { localStorage.removeItem('vendedor_session'); }
+}
+
+let selectedVendedor = null;
+let pinDigits = [];
+
+// Cargar vendedores activos
+async function loadVendedores() {
+  const { data, error } = await db.from('vendedores').select('id,nombre').eq('activo', true).order('nombre');
+  const el = document.getElementById('vendedor-list');
+  if (error || !data?.length) {
+    el.innerHTML = '<div class="loading-msg">No hay vendedores registrados.<br>Pide al admin que te agregue.</div>';
+    return;
+  }
+  el.innerHTML = data.map(v => `
+    <button class="vendedor-btn" onclick="selectVendedor('${v.id}','${v.nombre.replace(/'/g,"\\'")}')">
+      <div class="avatar">${v.nombre.charAt(0).toUpperCase()}</div>
+      ${v.nombre}
+    </button>`).join('');
+}
+
+function selectVendedor(id, nombre) {
+  selectedVendedor = { id, nombre };
+  pinDigits = [];
+  document.getElementById('pin-name').textContent = nombre;
+  document.getElementById('pin-error').textContent = '';
+  updateDots();
+  document.getElementById('step-select').hidden = true;
+  document.getElementById('step-pin').hidden = false;
+}
+
+function goBack() {
+  document.getElementById('step-pin').hidden = true;
+  document.getElementById('step-select').hidden = false;
+  pinDigits = [];
+  updateDots();
+}
+
+// Construir teclado PIN
+const grid = document.getElementById('pin-grid');
+const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
+keys.forEach(k => {
+  const btn = document.createElement('button');
+  btn.className = 'pin-key' + (k === '⌫' ? ' del' : '');
+  btn.textContent = k || '';
+  btn.style.visibility = k === '' ? 'hidden' : 'visible';
+  if (k !== '') btn.addEventListener('click', () => pressKey(k));
+  grid.appendChild(btn);
+});
+
+function pressKey(k) {
+  if (k === '⌫') {
+    pinDigits.pop();
+  } else if (pinDigits.length < 4) {
+    pinDigits.push(k);
+    if (pinDigits.length === 4) setTimeout(validatePin, 80);
+  }
+  updateDots();
+}
+
+function updateDots() {
+  document.querySelectorAll('.pin-dot').forEach((d, i) => {
+    d.classList.toggle('filled', i < pinDigits.length);
+    d.classList.remove('error');
   });
+}
 
-  document.getElementById('btn-login').addEventListener('click', login);
+async function validatePin() {
+  const pin = pinDigits.join('');
+  const { data } = await db.from('vendedores')
+    .select('id,nombre,pin')
+    .eq('id', selectedVendedor.id)
+    .eq('pin', pin)
+    .eq('activo', true)
+    .single();
 
-  function login() {
-    const nombre = document.getElementById('nombre').value.trim();
-    if (!nombre) {
-      document.getElementById('nombre').style.borderColor = '#EF4444';
-      return;
-    }
-    localStorage.setItem('vendedor_nombre', nombre);
+  if (data) {
+    localStorage.setItem('vendedor_session', JSON.stringify({ id: data.id, nombre: data.nombre }));
     window.location.href = 'dashboard.html';
+  } else {
+    document.querySelectorAll('.pin-dot').forEach(d => d.classList.add('error'));
+    document.getElementById('pin-error').textContent = 'PIN incorrecto, intenta de nuevo';
+    document.getElementById('pin-dots').classList.add('shake');
+    setTimeout(() => {
+      pinDigits = [];
+      updateDots();
+      document.getElementById('pin-dots').classList.remove('shake');
+    }, 600);
   }
+}
+
+loadVendedores();
 </script>
 </body>
 </html>
