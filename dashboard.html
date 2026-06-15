@@ -21,6 +21,7 @@
     <a href="pedidos.html"      class="nav-item" data-page="pedidos">     <span class="icon">📦</span> Mis Pedidos</a>
     <a href="ventas.html"       class="nav-item" data-page="ventas">      <span class="icon">💰</span> Ventas</a>
     <a href="crm.html"          class="nav-item" data-page="crm">         <span class="icon">👥</span> CRM</a>
+    <a href="catalogo.html"     class="nav-item" data-page="catalogo">    <span class="icon">📦</span> Catálogo</a>
   </nav>
   <div class="sidebar-footer" id="sidebar-user"></div>
 </aside>
@@ -129,7 +130,7 @@ async function loadPedidos() {
   const { data } = await db.from('pedidos')
     .select('id,cliente,total,fecha,estatus')
     .eq('vendedor', vendedor)
-    .order('created_at', { ascending: false })
+    .order('num', { ascending: false })
     .limit(6);
 
   const el = document.getElementById('tbl-ped');
